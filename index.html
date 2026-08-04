@@ -25,6 +25,18 @@
   #q:focus{border-color:var(--primary);}
   .btn{padding:14px 22px;font-size:15px;border:none;border-radius:12px;background:var(--primary);color:#fff;cursor:pointer;white-space:nowrap;}
   .btn:hover{background:var(--primary-dark);}
+  .adv-bar{margin:0 0 10px;}
+  .adv-toggle{padding:8px 16px;border-radius:20px;border:1px dashed var(--primary);background:#fff;color:var(--primary);cursor:pointer;font-size:14px;transition:background .15s;}
+  .adv-toggle:hover{background:var(--accent);}
+  .adv-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;animation:fadeIn .25s ease both;}
+  .adv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+  .adv-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .adv-field input,.adv-field select{width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:#fff;color:var(--text);}
+  .adv-field input:focus,.adv-field select:focus{border-color:var(--primary);}
+  .adv-actions{display:flex;gap:10px;margin-top:14px;}
+  .btn-ghost{background:#fff;color:var(--primary);border:1px solid var(--primary);}
+  .btn-ghost:hover{background:var(--accent);}
+  @media (max-width:640px){.adv-grid{grid-template-columns:1fr 1fr;}}
   .school-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px;}
   .tab{padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:14px;color:var(--muted);transition:background .15s,color .15s,border-color .15s;}
   .tab:hover{border-color:var(--primary);color:var(--primary);}
@@ -81,6 +93,24 @@
     <input id="q" type="text" placeholder="输入学生姓名，跨学校查询录取情况（如：戴浩哲）" autocomplete="off">
     <button class="btn" onclick="doSearch()">搜索</button>
   </div></div>
+
+  <div class="adv-bar">
+    <button id="advToggleBtn" class="adv-toggle" onclick="toggleAdv()">高级检索 ▾</button>
+  </div>
+  <div id="advPanel" class="adv-panel" style="display:none">
+    <div class="adv-grid">
+      <div class="adv-field"><label for="advName">姓名</label><input id="advName" type="text" placeholder="部分匹配，如：戴浩" autocomplete="off"></div>
+      <div class="adv-field"><label for="advSchool">学校</label><select id="advSchool"><option value="">全部学校</option></select></div>
+      <div class="adv-field"><label for="advType">名单类型</label><select id="advType"><option value="">全部类型</option></select></div>
+      <div class="adv-field"><label for="advCls">班级</label><select id="advCls"><option value="">全部班级</option></select></div>
+      <div class="adv-field"><label for="advSex">性别</label><select id="advSex"><option value="">全部</option><option>男</option><option>女</option></select></div>
+      <div class="adv-field"><label for="advId">准考证号 / 学籍号</label><input id="advId" type="text" placeholder="输入几位数字即可，自动忽略掩码" autocomplete="off"></div>
+    </div>
+    <div class="adv-actions">
+      <button class="btn" onclick="advSearch()">检索</button>
+      <button class="btn btn-ghost" onclick="advReset()">重置</button>
+    </div>
+  </div>
 
   <div class="school-tabs" id="tabs"></div>
 
@@ -240,6 +270,84 @@ function doSearch(){
   }
   afterRender(view);
 }
+// ---------- 高级检索 ----------
+function toggleAdv(){
+  const p = document.getElementById('advPanel');
+  const b = document.getElementById('advToggleBtn');
+  const open = p.style.display !== 'none';
+  p.style.display = open ? 'none' : 'block';
+  b.textContent = open ? '高级检索 ▾' : '高级检索 ▴';
+}
+function initAdv(){
+  const schoolSel = document.getElementById('advSchool');
+  SCHOOLS.forEach(s=>{
+    const o = document.createElement('option'); o.value=s.key; o.textContent=s.name; schoolSel.appendChild(o);
+  });
+  const typeSel = document.getElementById('advType');
+  const types = [...new Set(DATA.map(r=>r.type))].sort();
+  types.forEach(t=>{
+    const o = document.createElement('option'); o.value=t; o.textContent=t+'（'+DATA.filter(r=>r.type===t).length+'）'; typeSel.appendChild(o);
+  });
+  const clsSel = document.getElementById('advCls');
+  const clsSet = [...new Set(DATA.map(r=>r.cls).filter(Boolean))].sort((a,b)=>{
+    const na = parseInt(a), nb = parseInt(b);
+    if(!isNaN(na) && !isNaN(nb)) return na-nb;
+    if(!isNaN(na)) return -1; if(!isNaN(nb)) return 1;
+    return a.localeCompare(b,'zh');
+  });
+  clsSet.forEach(c=>{
+    const o = document.createElement('option'); o.value=c; o.textContent=c; clsSel.appendChild(o);
+  });
+}
+function stripMask(s){ return String(s||'').replace(/[*＊]/g,''); }
+function advSearch(){
+  const f = {
+    name: document.getElementById('advName').value.trim(),
+    school: document.getElementById('advSchool').value,
+    type: document.getElementById('advType').value,
+    cls: document.getElementById('advCls').value,
+    sex: document.getElementById('advSex').value,
+    idv: stripMask(document.getElementById('advId').value.trim())
+  };
+  const view = document.getElementById('view');
+  document.getElementById('ocrHint').style.display = 'block';
+  buildTabs(null);
+  const hits = DATA.filter(r=>{
+    if(f.name && r.name.indexOf(f.name)<0) return false;
+    if(f.school && r.school!==f.school) return false;
+    if(f.type && r.type!==f.type) return false;
+    if(f.cls && r.cls!==f.cls) return false;
+    if(f.sex && r.sex!==f.sex) return false;
+    if(f.idv && stripMask(r.zk).indexOf(f.idv)<0 && stripMask(r.xj).indexOf(f.idv)<0) return false;
+    return true;
+  });
+  const conds = [];
+  if(f.name) conds.push('姓名含「'+f.name+'」');
+  const s = f.school ? schoolOf(f.school) : null;
+  if(s) conds.push('学校='+s.name);
+  if(f.type) conds.push('名单='+f.type);
+  if(f.cls) conds.push('班级='+f.cls);
+  if(f.sex) conds.push('性别='+f.sex);
+  if(f.idv) conds.push('编号含「'+f.idv+'」');
+  let html = '<div class="card"><h2>高级检索结果 <span class="count">'+hits.length+' 人</span></h2>'+
+    '<div class="meta">'+(conds.length?conds.join(' · '):'未设置任何筛选条件（请至少填写一项）')+'</div>'+
+    '<div class="meta">点击任一结果，将自动跳转到该学校名单并高亮该学生所在行。</div></div>';
+  if(hits.length===0){
+    html += '<div class="card"><div class="empty"><div class="big">未找到符合条件的记录</div>可尝试放宽筛选条件（姓名支持部分匹配，编号可只输入几位数字）。</div></div>';
+  }else{
+    const show = hits.slice(0,200);
+    if(hits.length>200) html += '<div class="hint">共 '+hits.length+' 条结果，仅显示前 200 条，请增加筛选条件缩小范围。</div>';
+    html += '<div class="result-list">' + show.map(r=>resultCard(r,f.name)).join('') + '</div>';
+  }
+  view.innerHTML = html;
+  afterRender(view);
+}
+function advReset(){
+  ['advName','advCls','advId'].forEach(id=>document.getElementById(id).value='');
+  ['advSchool','advType','advSex'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('advName').focus();
+}
+initAdv();
 document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
 
 render('ALL');
